@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "pwd.h": "c",
+        "unistd.h": "c",
+        "dlfcn.h": "c",
+        "utmpx.h": "c"
+    }
+}
