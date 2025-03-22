@@ -15,6 +15,46 @@ void get_user_no_flags(struct utmpx * _utmpx, int userSeqID) {
     }
 }
 
+void get_user_host_flag(struct utmpx * _utmpx, int userSeqID) {
+    while (_utmpx = getutxent()) {
+        if (_utmpx->ut_type == USER_PROCESS) {
+            userSeqID++;
+            printf("User No. %d | Login: %s | Host: %s\n", userSeqID, _utmpx->ut_user, _utmpx->ut_host);
+        }
+    }
+}
+
+void get_user_group_flag(struct utmpx * _utmpx, int userSeqID) {
+    struct passwd * _passwd;
+    while (_utmpx = getutxent()) {
+        if (_utmpx->ut_type == USER_PROCESS) {
+            userSeqID++;
+            const char * user_name = _utmpx->ut_user;
+            _passwd = getpwnam(user_name);
+            char * groups = get_groups(_passwd);
+            printf("User No. %d | Login: %s | Groups: [%s]\n", userSeqID, user_name, groups);
+
+            free(groups);
+        }
+    }
+}
+
+void get_user_extended_data(struct utmpx * _utmpx, int userSeqID) {
+    struct passwd * _passwd;
+    while (_utmpx = getutxent()) {
+        if (_utmpx->ut_type == USER_PROCESS) {
+            userSeqID++;
+            const char * user_name = _utmpx->ut_user;
+            _passwd = getpwnam(user_name);
+            char * groups = get_groups(_passwd);
+            printf("User No. %d | Login: %s | Host: %s | Groups: [%s]\n", userSeqID, user_name, _utmpx->ut_host, groups);
+
+            free(groups);
+        }
+    }
+
+}
+
 int main(int argc, char **argv) {
     int hFlag = 0, gFlag = 0, opt;
     const char* optstring = "hg";

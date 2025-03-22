@@ -3,6 +3,7 @@
         "pwd.h": "c",
         "unistd.h": "c",
         "dlfcn.h": "c",
-        "utmpx.h": "c"
+        "utmpx.h": "c",
+        "stdio.h": "c"
     }
 }
