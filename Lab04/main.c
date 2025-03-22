@@ -8,6 +8,9 @@
 #include <sys/time.h>
 #include <sys/wait.h>
 #include <sys/resource.h>
+#include <time.h>
+#define BILLION  1000000000L
+#define MICROSECOND 1000000L
 
 
 int getcmdlen(int argc, char *argv[], int optind) {
@@ -71,8 +74,10 @@ int main(int argc, char* argv[]) {
 
     if (v_flag == 1) {
         close(1);
+        close(2);
         int h = open("/dev/null", O_WRONLY);
         dup2(h, 1);
+        dup2(h, 2);
     }
 
     int len = getcmdlen(argc, argv, optind);
@@ -85,8 +90,12 @@ int main(int argc, char* argv[]) {
     create_args(args, cmd);
 
     long int mean_real = 0, mean_user = 0, mean_sys = 0;
+    struct timespec start, stop;
+    double real_res = 0;
 
     for (int i = 0; i < inv; i++) {
+        clock_gettime(CLOCK_REALTIME, &start);
+
         pid_t pid = fork();
 
         if (pid == 0) {
@@ -100,15 +109,19 @@ int main(int argc, char* argv[]) {
             struct rusage _rusage;
             pid_t child_pid = wait3(&status_location, 0, &_rusage);
 
-
+            clock_gettime(CLOCK_REALTIME, &stop);
             long int user_sec = _rusage.ru_utime.tv_sec, user_usec = _rusage.ru_utime.tv_usec;
             long int sys_sec = _rusage.ru_stime.tv_sec, sys_usec = _rusage.ru_stime.tv_usec;
 
             mean_user += _rusage.ru_utime.tv_usec;
             mean_sys += _rusage.ru_stime.tv_usec;
 
+            real_res = (stop.tv_sec - start.tv_sec) + ( stop.tv_nsec - start.tv_nsec ) / BILLION;
+            real_res = (stop.tv_sec - start.tv_sec) * MICROSECOND + (stop.tv_nsec - start.tv_nsec) / 1000;
+
             printf("Executing user instructions:   %ld [s] | %.06ld [ms]\n", user_sec, user_usec);
             printf("Executing system instructions: %ld [s] | %.06ld [ms]\n", sys_sec, sys_usec);
+            printf("Real time: %.06f [ms].\n", real_res);
         }
     } 
 
