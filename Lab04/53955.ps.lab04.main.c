@@ -1,3 +1,6 @@
+// PS IS1 32O LAB04
+// Bartłomiej Szewczyk
+// sb53955@zut.edu.pl
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -10,7 +13,7 @@
 #include <sys/resource.h>
 #include <time.h>
 #define BILLION  1000000000L
-#define MICROSECOND 1000000L
+
 
 
 void setcmdcom(char * args[], char * argv[], int optind, int argc) {
@@ -44,6 +47,9 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    if (v_flag == 0 && inv == 1)
+        return 0;
+
 
     int ind = argc - optind;
     char * args[ind + 1];
@@ -51,10 +57,11 @@ int main(int argc, char* argv[]) {
 
     long int mean_real = 0, mean_user = 0, mean_sys = 0;
     struct timespec start, stop;
-    double real_res = 0;
+    double real_res_ms = 0.0, real_res_s = 0.0;
+    double mean_real_ms = 0.0, mean_real_s = 0.0;
 
     for (int i = 0; i < inv; i++) {
-        clock_gettime(CLOCK_REALTIME, &start);
+        clock_gettime(CLOCK_MONOTONIC, &start);
 
         pid_t pid = fork();
 
@@ -76,19 +83,24 @@ int main(int argc, char* argv[]) {
             struct rusage _rusage;
             pid_t child_pid = wait3(&status_location, 0, &_rusage);
 
-            clock_gettime(CLOCK_REALTIME, &stop);
+            clock_gettime(CLOCK_MONOTONIC, &stop);
             long int user_sec = _rusage.ru_utime.tv_sec, user_usec = _rusage.ru_utime.tv_usec;
             long int sys_sec = _rusage.ru_stime.tv_sec, sys_usec = _rusage.ru_stime.tv_usec;
 
             mean_user += _rusage.ru_utime.tv_usec;
             mean_sys += _rusage.ru_stime.tv_usec;
 
-            real_res = (stop.tv_sec - start.tv_sec) + ( stop.tv_nsec - start.tv_nsec ) / BILLION;
-            real_res = (stop.tv_sec - start.tv_sec) * MICROSECOND + (stop.tv_nsec - start.tv_nsec) / 1000;
+            real_res_s = (stop.tv_sec - start.tv_sec) + (double) (( stop.tv_nsec - start.tv_nsec ) / (double) BILLION);
+            real_res_ms = (stop.tv_sec - start.tv_sec) + (double) ((stop.tv_nsec - start.tv_nsec) / (double) 1000000);
+
+
+            mean_real_ms += real_res_ms;
+            mean_real_s += real_res_s;
 
             printf("\nExecuting user instructions:   %ld [s] | %.06ld [ms]\n", user_sec, user_usec);
             printf("Executing system instructions: %ld [s] | %.06ld [ms]\n", sys_sec, sys_usec);
-            printf("Real time: %.06f [ms].\n", real_res);
+            printf("Real time: %.06f [s].\n", real_res_s);
+            printf("Real time: %.06f [ms].\n", real_res_ms);
             printf("------------------------------------------------------------\n\n");
         }
     } 
@@ -96,6 +108,9 @@ int main(int argc, char* argv[]) {
     if (inv > 1) {
         printf("\nAvg. user time:   %.06ld [ms].\n", mean_user / inv);
         printf("Avg. system time: %.06ld [ms].\n", mean_sys / inv);
+        printf("Avg. real time: %.06f [s].\n", mean_real_s / (double)inv);
+        printf("Avg. real time: %.06f [ms].\n", mean_real_ms / (double)inv);
+
     }
 
     return 0;
