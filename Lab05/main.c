@@ -36,6 +36,16 @@ void sigint_handler(int sigNo, siginfo_t *si, void *sc) {
     loop = false;
 }
 
+void _sleep(int seconds) {
+    struct timespec req, rem;
+    req.tv_sec = seconds;
+    req.tv_nsec = 0;
+
+    while (nanosleep(&req, &rem) == -1) {
+        req = rem;
+    }
+}
+
 unsigned long long inf_factorial() {
     unsigned long long factorial = 1;
 
@@ -92,7 +102,7 @@ int main(int argc, char* argv[]) {
             struct sigaction sa_alarm;
             sigemptyset(&sa_alarm.sa_mask);
             sa_alarm.sa_sigaction = sigalarm_handler;
-            sa_alarm.sa_flags = SA_SIGINFO;
+            sa_alarm.sa_flags = SA_RESTART | SA_SIGINFO;
             sigaction(SIGALRM, &sa_alarm, NULL);
 
             int ttl = rand() % m + 1;
@@ -103,14 +113,15 @@ int main(int argc, char* argv[]) {
 
             printf("[ %d ] [ %d ] [ %02d / %02d / %04d %02d:%02d:%02d ]\n", getpid(), ttl, 
                     _tm->tm_mday, _tm->tm_mon + 1, _tm->tm_year + 1900, _tm->tm_hour, _tm->tm_min, _tm->tm_sec
-                );
+            );
 
             unsigned long long res = inf_factorial();
             //exit(ttl);
         } else {
+            // sleep(w);
             number_of_process++;
         }
-        sleep(w); //nanosleep
+        _sleep(w);
     } 
 
     while(number_of_process > 0) {
