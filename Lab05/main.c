@@ -106,11 +106,11 @@ int main(int argc, char* argv[]) {
                 );
 
             unsigned long long res = inf_factorial();
-            exit(ttl);
+            //exit(ttl);
         } else {
             number_of_process++;
         }
-        sleep(w);
+        sleep(w); //nanosleep
     } 
 
     while(number_of_process > 0) {
