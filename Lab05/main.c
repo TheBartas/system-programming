@@ -7,23 +7,19 @@
 #include <time.h>
 #include <string.h>
 #include <stdbool.h>
-
-
-// w - czas między tworzeniem nowych procesów
-// m - maksymalny czas życia procesu
+#include <sys/wait.h>
 
 bool loop = true;
-// int number_of_process = 0;
 volatile sig_atomic_t number_of_process = 0;
 
 void sigchild_handler(int sigNo, siginfo_t *si, void *sc) {
-    time_t t; 
+    time_t t;
     struct tm *_tm;
+    int status;
     number_of_process--;
     time(&t);
     _tm = localtime(&t);
-
-    printf("\t\t[ %d ] [ %d ] [ %02d / %02d / %04d %02d:%02d:%02d ]\n", si->si_pid, si->si_status,
+    printf("\t\t[ %d ] [ %d ] [ %02d / %02d / %04d %02d:%02d:%02d ]\n", si->si_pid, WEXITSTATUS(status),
             _tm->tm_mday, _tm->tm_mon + 1, _tm->tm_year + 1900, _tm->tm_hour, _tm->tm_min, _tm->tm_sec
         );
 }
@@ -40,7 +36,6 @@ void _sleep(int seconds) {
     struct timespec req, rem;
     req.tv_sec = seconds;
     req.tv_nsec = 0;
-
     while (nanosleep(&req, &rem) == -1) {
         req = rem;
     }
@@ -48,8 +43,7 @@ void _sleep(int seconds) {
 
 unsigned long long inf_factorial() {
     unsigned long long factorial = 1;
-
-    for (int i = 1;;i++) {
+    for (int i = 1;; i++) {
         factorial *= i;
     }
     return factorial;
@@ -74,11 +68,10 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-
     struct sigaction sa_child;
     sigemptyset(&sa_child.sa_mask);
     sa_child.sa_sigaction = sigchild_handler;
-    sa_child.sa_flags = SA_SIGINFO;
+    sa_child.sa_flags = SA_SIGINFO | SA_RESTART;
     sigaction(SIGCHLD, &sa_child, NULL);
 
     struct sigaction sa_sigint;
@@ -102,7 +95,7 @@ int main(int argc, char* argv[]) {
             struct sigaction sa_alarm;
             sigemptyset(&sa_alarm.sa_mask);
             sa_alarm.sa_sigaction = sigalarm_handler;
-            sa_alarm.sa_flags = SA_RESTART | SA_SIGINFO;
+            sa_alarm.sa_flags = SA_SIGINFO;
             sigaction(SIGALRM, &sa_alarm, NULL);
 
             int ttl = rand() % m + 1;
@@ -116,16 +109,19 @@ int main(int argc, char* argv[]) {
             );
 
             unsigned long long res = inf_factorial();
-            //exit(ttl);
+            exit(ttl);
         } else {
-            // sleep(w);
             number_of_process++;
         }
         _sleep(w);
     } 
 
     while(number_of_process > 0) {
+        //wait(NULL);
+        //int status;
+        //waitpid(-1, &status, 0);
         pause();
+        //number_of_process--;
     }
     return 0;
 }
