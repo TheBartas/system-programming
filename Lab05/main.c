@@ -19,7 +19,7 @@ void sigchild_handler(int sigNo, siginfo_t *si, void *sc) {
     number_of_process--;
     time(&t);
     _tm = localtime(&t);
-    printf("\t\t[ %d ] [ %d ] [ %02d / %02d / %04d %02d:%02d:%02d ]\n", si->si_pid, WEXITSTATUS(status),
+    printf("\t\t[ %d ] [ %d ] [ %02d / %02d / %04d %02d:%02d:%02d ]\n", si->si_pid, si->si_status,
             _tm->tm_mday, _tm->tm_mon + 1, _tm->tm_year + 1900, _tm->tm_hour, _tm->tm_min, _tm->tm_sec
         );
 }
