@@ -1,0 +1,129 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include "lib.h"
+
+// array1d _array1d;
+node1d_t * head = NULL;
+node1d_t * tail = NULL;
+int list_size = 0;
+int status_code;
+
+void _add_node(void *ptr, size_t size) {
+    node1d_t *new_node = NULL; 
+    if ((new_node = malloc(sizeof(node1d_t))) == NULL) {
+        status_code = ERROR_MALLOC;
+        return;
+    } 
+    new_node->inptr = ptr;
+    new_node->size = size;
+    new_node->next = NULL;
+
+    if(head == NULL) {
+        head = new_node;
+    }
+
+    if(tail != NULL) {
+        tail->next = new_node;
+    }
+    tail = new_node;
+    list_size++;
+}
+
+node1d_t *_find(void *ptr) {
+    node1d_t *current = head;
+    while(current != NULL) {
+        if (current->inptr == ptr) {
+            return current;
+        }
+        current = current->next;
+    }
+    return NULL;
+}
+
+void _remove_node(void *ptr) {
+    node1d_t *prev = NULL;
+    node1d_t *current = head;
+
+    while(current!=NULL) {
+        if (current->inptr == ptr) {
+            if (prev == NULL) {
+                head = current->next;
+
+            } else if (current->next == NULL) {
+                prev->next = NULL;
+
+            } else {
+                prev->next = current->next;
+            }
+            free(current);
+            list_size--;
+            return;
+        }
+
+        prev = current;
+        current = current->next;
+    }
+
+}
+
+void _show_data() {
+    node1d_t *current = head;
+    int i = 0;
+    while(current != NULL) {
+        i++;
+        printf("Addr [%d]: %p (%ld)\n", i, current->inptr, current->size);
+        current = current->next;
+    }
+}
+
+void *mem_alloc(void *ptr, int size) {
+    if (size <= 0) {
+        status_code = ERROR_ALLOC_SIZE;
+        return NULL;
+    } 
+    
+    if (ptr == NULL) {
+        void *inptr = calloc(1, size);
+
+        if (inptr != NULL) {
+            _add_node(inptr, size);
+            status_code = SUCCESS;
+            return inptr;
+        }
+
+        status_code = ERROR_CALLOC;
+        return NULL;
+
+    } else {
+        node1d_t * node = NULL;      
+
+        if ((node = _find(ptr)) != NULL) {
+            void *rlptr = NULL;
+
+            if ((rlptr = realloc(ptr, sizeof * ptr * size)) == NULL) {
+                status_code = ERROR_REALLOC;
+                return NULL;
+            }
+
+            node->inptr = rlptr;
+            node->size = size;
+            return rlptr;
+
+        } 
+
+        return NULL;
+    }
+
+    return NULL;
+}
+
+int mem_free(void *ptr) {
+    if (ptr != NULL) {
+        free(ptr);
+        _remove_node(ptr);
+        status_code = SUCCESS;
+        return NULL;
+    } 
+    status_code = ERROR_FREE;
+    return NULL;
+}
