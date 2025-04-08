@@ -1,3 +1,6 @@
+// PS IS1 320 LAB05
+// Bartłomiej Szewczyk
+// sb53955@zut.edu.pl
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
@@ -10,13 +13,12 @@
 #include <sys/wait.h>
 
 bool loop = true;
-volatile sig_atomic_t number_of_process = 0;
+volatile sig_atomic_t ttl = 0;
 
 void sigchild_handler(int sigNo, siginfo_t *si, void *sc) {
     time_t t;
     struct tm *_tm;
     int status;
-    number_of_process--;
     time(&t);
     _tm = localtime(&t);
     printf("\t\t[ %d ] [ %d ] [ %02d / %02d / %04d %02d:%02d:%02d ]\n", si->si_pid, si->si_status,
@@ -25,7 +27,8 @@ void sigchild_handler(int sigNo, siginfo_t *si, void *sc) {
 }
 
 void sigalarm_handler(int sigNo, siginfo_t *si, void *sc) {
-    exit(3); 
+    //printf("%d ", ttl);
+    exit(ttl); 
 }
 
 void sigint_handler(int sigNo, siginfo_t *si, void *sc) {
@@ -71,7 +74,7 @@ int main(int argc, char* argv[]) {
     struct sigaction sa_child;
     sigemptyset(&sa_child.sa_mask);
     sa_child.sa_sigaction = sigchild_handler;
-    sa_child.sa_flags = SA_SIGINFO | SA_RESTART;
+    sa_child.sa_flags = SA_SIGINFO;
     sigaction(SIGCHLD, &sa_child, NULL);
 
     struct sigaction sa_sigint;
@@ -98,7 +101,7 @@ int main(int argc, char* argv[]) {
             sa_alarm.sa_flags = SA_SIGINFO;
             sigaction(SIGALRM, &sa_alarm, NULL);
 
-            int ttl = rand() % m + 1;
+            ttl = rand() % m + 1;
 
             time(&t);
             _tm = localtime(&t);
@@ -109,19 +112,20 @@ int main(int argc, char* argv[]) {
             );
 
             unsigned long long res = inf_factorial();
-            exit(ttl);
         } else {
-            number_of_process++;
+            _sleep(w);
         }
-        _sleep(w);
     } 
 
-    while(number_of_process > 0) {
-        //wait(NULL);
-        //int status;
-        //waitpid(-1, &status, 0);
-        pause();
-        //number_of_process--;
-    }
+    // while(number_of_process > 0) {
+    //     //wait(NULL);
+    //     //int status;
+    //     //waitpid(-1, &status, 0);
+    //     pause();
+    //     //number_of_process--;
+    // }
+
+    while(wait(NULL) != -1);
+
     return 0;
 }
