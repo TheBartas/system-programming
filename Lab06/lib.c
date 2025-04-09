@@ -49,11 +49,12 @@ void _remove_node(void *ptr) {
             if (prev == NULL) {
                 head = current->next;
 
-            } else if (current->next == NULL) {
-                prev->next = NULL;
-
             } else {
                 prev->next = current->next;
+            }
+
+            if (current == tail) {
+                tail = prev;
             }
             free(current);
             list_size--;
@@ -66,14 +67,33 @@ void _remove_node(void *ptr) {
 
 }
 
+void _clean_all() {
+    node1d_t * current = head;
+
+    while (current != NULL) {
+        node1d_t * temp = current->next;
+        free(current->inptr);
+        free(current);
+        current = temp;
+    }
+    head = NULL;
+    tail = NULL;
+    list_size = 0;
+}
+
 void _show_data() {
     node1d_t *current = head;
     int i = 0;
+    printf("List length: [%d]\n", list_size);
     while(current != NULL) {
         i++;
         printf("Addr [%d]: %p (%ld)\n", i, current->inptr, current->size);
         current = current->next;
     }
+}
+
+extern void _auto_clean() {
+    atexit(_clean_all);
 }
 
 void *mem_alloc(void *ptr, int size) {
@@ -100,7 +120,7 @@ void *mem_alloc(void *ptr, int size) {
         if ((node = _find(ptr)) != NULL) {
             void *rlptr = NULL;
 
-            if ((rlptr = realloc(ptr, sizeof * ptr * size)) == NULL) {
+            if ((rlptr = realloc(ptr, size)) == NULL) {
                 status_code = ERROR_REALLOC;
                 return NULL;
             }
@@ -119,8 +139,8 @@ void *mem_alloc(void *ptr, int size) {
 
 int mem_free(void *ptr) {
     if (ptr != NULL) {
-        free(ptr);
         _remove_node(ptr);
+        free(ptr);
         status_code = SUCCESS;
         return NULL;
     } 
