@@ -2,17 +2,43 @@
 #include <stdlib.h>
 #include <getopt.h>
 #include <time.h>
-#include <stdbool.h>
+#include <unistd.h>
+#include <signal.h>
+#include "thread.h"
+#include "timer.h"
+
+void *inf_factorial() {
+    start();
+    unsigned long long factorial = 1;
+    for (int i = 1;; i++) {
+        factorial *= i;
+    }
+    return NULL;
+}
+
+void sigint_handler(int sigNo) {
+    double ttl = stop();
+    time_t _time_t; 
+    struct tm *_tm;
+
+    time(&_time_t);
+    _tm = localtime(&_time_t);
+
+    printf("\t\t[ %ld ] [ %f (ms)]\n", pthread_self(), ttl);
+
+    pthread_exit(NULL);
+}
 
 int main(int argc, char* argv[]) {
-    int t_flag = 0, n_flag = 0;
+    int t_flag = 0, n_flag = 0, i_flag = 0;
     int ret, t, n;
-    const char *optstring = "n:t:";
+    const char *optstring = "n:t:i";
 
     while((ret = getopt(argc, argv, optstring)) != -1) {
         switch (ret) {
             case 'n': n = atoi(optarg); n_flag = 1; break;
             case 't': t = atoi(optarg); t_flag = 1; break;
+            case 'i': i_flag = 1; break;
             case '?': return -1;
             default: abort();
         }
@@ -28,20 +54,53 @@ int main(int argc, char* argv[]) {
         return -1;
     } 
 
-    int *times = NULL;
-    times = malloc(sizeof * times * n);
+    int thread_counter = 0;
+    thread_t * _thread = thread_alloc(n);
 
-    for (int i = 0; i < n; i++) {
-        times[i] = rand() % n + 1;
+    srand(time(NULL));
+    time_t _time_t; 
+    struct tm *_tm;
+
+    time(&_time_t);
+    _tm = localtime(&_time_t);
+
+    for (int i = 0;i < n;i++) {
+        _thread[i].ttl = rand() % t + 1; 
+        if(pthread_create(&_thread[i].thread_id, NULL, inf_factorial, NULL) != 0) {
+            fprintf(stderr, "Error creating thread! Iter: [%d]", i);
+            free(_thread);
+            return -1;
+        };
+        printf("[ %ld ] [ %d (s)]\n", _thread[i].thread_id, _thread[i].ttl);
+        thread_counter++;
     }
 
-    for (int i = 0; i < n; i++) {
-        printf("%d\n", times[i]);
+    thread_sort(_thread, n);
+
+    if (i_flag == 1) thread_show(_thread, n);
+
+    printf("---------------------------------\n\n");
+
+    thread_calc_time(_thread, n);
+
+    if (i_flag == 1) thread_show(_thread, n);
+
+    struct sigaction act;
+    act.sa_handler = sigint_handler;
+    act.sa_flags = SA_SIGINFO;
+    sigemptyset(&(act.sa_mask));
+    sigaction(SIGINT, &act, NULL);
+
+    int idx = 0;
+    while (thread_counter != 0) {
+        thread_counter--;
+        int ttl = _thread[idx].ttl;
+        sleep(ttl);
+        pthread_kill(_thread[idx].thread_id, SIGINT);
+        pthread_join(_thread[idx].thread_id, NULL);
+        idx++;
     }
 
-
-
-    printf("Gut!\n");
-    free(times);
+    free(_thread);
     return 0;
 }
