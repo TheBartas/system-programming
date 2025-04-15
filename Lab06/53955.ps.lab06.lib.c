@@ -1,12 +1,29 @@
+// PS IS 320 LAB06
+// Bartłomiej Szewczyk
+// sb53955@zut.edu.pl
 #include <stdio.h>
 #include <stdlib.h>
-#include "lib.h"
+#include "53955.ps.lab06.lib.h"
 
-// array1d _array1d;
 node1d_t * head = NULL;
 node1d_t * tail = NULL;
 int list_size = 0;
 int status_code;
+
+void _clean_all() {
+    node1d_t * current = head;
+
+    while (current != NULL) {
+        node1d_t * temp = current->next;
+        free(current->inptr);
+        free(current);
+        current = temp;
+    }
+    head = NULL;
+    tail = NULL;
+    list_size = 0;
+}
+
 
 void _add_node(void *ptr, size_t size) {
     node1d_t *new_node = NULL; 
@@ -67,20 +84,6 @@ void _remove_node(void *ptr) {
 
 }
 
-void _clean_all() {
-    node1d_t * current = head;
-
-    while (current != NULL) {
-        node1d_t * temp = current->next;
-        free(current->inptr);
-        free(current);
-        current = temp;
-    }
-    head = NULL;
-    tail = NULL;
-    list_size = 0;
-}
-
 void _show_data() {
     node1d_t *current = head;
     int i = 0;
@@ -92,23 +95,23 @@ void _show_data() {
     }
 }
 
-extern void _auto_clean() {
+void __attribute__((constructor)) _init_list() { 
     atexit(_clean_all);
 }
 
 void *mem_alloc(void *ptr, int size) {
-    if (size <= 0) {
-        status_code = ERROR_ALLOC_SIZE;
+    if (size == 0) {
+        status_code = ERROR_ALLOC_ZERO_SIZE;
         return NULL;
     } 
     
     if (ptr == NULL) {
-        void *inptr = calloc(1, size);
+        void *cptr = calloc(1, size);
 
-        if (inptr != NULL) {
-            _add_node(inptr, size);
+        if (cptr != NULL) {
+            _add_node(cptr, size);
             status_code = SUCCESS;
-            return inptr;
+            return cptr;
         }
 
         status_code = ERROR_CALLOC;
