@@ -18,11 +18,6 @@ void *inf_factorial() {
 
 void sigint_handler(int sigNo) {
     double ttl = stop();
-    time_t _time_t; 
-    struct tm *_tm;
-
-    time(&_time_t);
-    _tm = localtime(&_time_t);
 
     printf("\t\t[ %ld ] [ %f (ms)]\n", pthread_self(), ttl);
 
@@ -49,8 +44,8 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    if (t < 0 || n < 0) {
-        fprintf(stderr, "[Error] Time [-t] <%d> and number [-n] <%d> cannot be less than 0!\n", t, n);
+    if (t <= 0 || n <= 0) {
+        fprintf(stderr, "[Error] Time [-t] <%d> and number [-n] <%d> cannot be less than 1!\n", t, n);
         return -1;
     } 
 
