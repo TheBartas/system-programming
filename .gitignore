@@ -50,3 +50,6 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Lab08 - plik z hasłami
+lab008.medium.txt
