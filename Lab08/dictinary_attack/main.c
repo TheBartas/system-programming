@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <pthread.h>
 #define ERROR_NOARG -2
 #define ERROR_FPROC -3
 #define ERROR_SIZPROC -4
@@ -61,6 +62,14 @@ char *_mmap_rd(char *file_name, struct stat *st) {
     return mem_file;
 }
 
+
+void *proc_block(void *args) {
+    int *n = (int *)args;
+    printf("n = %d\n", n[1]);
+    free(n);
+    return NULL;
+}
+
 int main(int argc, char *argv[]) {
     const char *optstring = "t:f:p:";
     int t_flag = 0, f_flag = 0, p_flag = 0;
@@ -104,49 +113,29 @@ int main(int argc, char *argv[]) {
         char *mem_file = _mmap_rd(f, &st);
         printf("\nSize: %ld\n", st.st_size);
 
-        printf("\n");
 
         int *idx_arr = mem_blocks(mem_file, st.st_size, t);
 
+        for (int i = 0;i<t;i++) {
+            printf("%d\n", idx_arr[i]);
+        }
+
+        char * buf = NULL;
+        size_t size_buf = 0;
+        size_t offset = idx_arr[1];
+        size_t leng = idx_arr[2] - offset;
+        // FILE *in = fmemopen(mem_file, st.st_size, "r");
+        FILE *in = fmemopen(&mem_file[offset], leng, "r");
+
         char *encrpt = NULL; 
         struct crypt_data _crypt_data;
-
-        char *buf = NULL;
-        char *tmbf = NULL;
-        size_t sbf = 0;
-        //FILE *stream = open_memstream(&buf, &sbf);
         bool is_found = false;
 
+        while (getline(&buf, &size_buf, in) != -1) {
+            int len = strlen(buf) - 2;
+            if (buf[len] == '\r') buf[len] = '\0';
 
-        //fputs(mem_file, stream);
-        //fclose(stream);
-        //printf("%s", buf);
-        buf = malloc(20);
-        FILE *in = fmemopen(mem_file, st.st_size, "r");
-        // fputs(mem_file, in);
-        // fgets(buf, sizeof(buf), in);
-        // fclose(in);
-        // printf("%s", buf);
-        // strcspn();
-        
-        // while (fgets(buf, sizeof(buf), in)) {
-        //     // char *token = strtok(in, ";");
-        //     // while (token) {
-        //     //     printf("Fragment: %s\n", token);
-        //     //     token = strtok(NULL, ";");
-        //     // }
-        //     //printf("%s", buf);
-        //     if (strcmp(buf, "dees\r\n") == 0) {
-        //     }
-        // }
-
-        char * expbuf = NULL;
-        size_t size_expbuf = 0;
-        while (getline(&expbuf, &size_expbuf, in) != -1) {
-            int len = strlen(expbuf) - 2;
-            if (expbuf[len] == '\r') expbuf[len] = '\0';
-
-            if ((encrpt = crypt_r(expbuf, "$6$5MfvmFOaDU$", &_crypt_data)) != NULL) {
+            if ((encrpt = crypt_r(buf, "$6$5MfvmFOaDU$", &_crypt_data)) != NULL) {
                 if (strcmp(encrpt, rl_res) == 0) {
                     is_found = true;
                     break;
@@ -155,40 +144,53 @@ int main(int argc, char *argv[]) {
 
         }
 
-        /*
-        for (int i = 0; i < st.st_size; i++) {
-            if (mem_file[i] == '\r' && mem_file[i + 1] == '\n') { // chodzi o to, że hasła w pliku kończą się jako \r\n
-                i++;
-                fclose(stream);
-                if ((encrpt = crypt_r(buf, "$6$5MfvmFOaDU$", &_crypt_data)) != NULL) {
-                    if (strcmp(encrpt, rl_res) == 0) {
-                        is_found = true;
-                        break;
-                    }
-                }
-                free(buf);
-                sbf = 0;
-                stream = open_memstream(&buf, &sbf);   
-                continue;
-            }
-            fputc(mem_file[i], stream);
-        }
+        if (is_found) printf("Password found! Result is \"%s\"!\n", buf);
 
-        if (!is_found) {
-            fclose(stream);
-            if ((encrpt = crypt_r(buf, "$6$5MfvmFOaDU$", &_crypt_data)) != NULL) {
-                if (strcmp(encrpt, rl_res) == 0) {
-                    is_found = true;
-                }
-            }
-        }
-        */
-        if (is_found) printf("Password found! Result is \"%s\"!\n", expbuf);
-
+        pthread_t thr;
+        int a = 4;
+        int *arr = malloc(sizeof(int) * 2);
+        arr[0] = 23;
+        arr[1] = 1;
+        pthread_create(&thr, NULL, proc_block, arr);
 
         free(buf);
+        fclose(in);
+        // free(arr);
+        pthread_join(thr, NULL);
         free(idx_arr);
     }
 
     return 0;
 }
+
+
+/*
+FILE *stream = open_memstream(&buf, &sbf);
+
+for (int i = 0; i < st.st_size; i++) {
+    if (mem_file[i] == '\r' && mem_file[i + 1] == '\n') { // chodzi o to, że hasła w pliku kończą się jako \r\n
+        i++;
+        fclose(stream);
+        if ((encrpt = crypt_r(buf, "$6$5MfvmFOaDU$", &_crypt_data)) != NULL) {
+            if (strcmp(encrpt, rl_res) == 0) {
+                is_found = true;
+                break;
+            }
+        }
+        free(buf);
+        sbf = 0;
+        stream = open_memstream(&buf, &sbf);   
+        continue;
+    }
+    fputc(mem_file[i], stream);
+}
+
+if (!is_found) {
+    fclose(stream);
+    if ((encrpt = crypt_r(buf, "$6$5MfvmFOaDU$", &_crypt_data)) != NULL) {
+        if (strcmp(encrpt, rl_res) == 0) {
+            is_found = true;
+        }
+    }
+}
+*/
