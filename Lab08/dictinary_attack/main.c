@@ -112,10 +112,50 @@ int main(int argc, char *argv[]) {
         struct crypt_data _crypt_data;
 
         char *buf = NULL;
+        char *tmbf = NULL;
         size_t sbf = 0;
-        FILE *stream = open_memstream(&buf, &sbf);
+        //FILE *stream = open_memstream(&buf, &sbf);
         bool is_found = false;
 
+
+        //fputs(mem_file, stream);
+        //fclose(stream);
+        //printf("%s", buf);
+        buf = malloc(20);
+        FILE *in = fmemopen(mem_file, st.st_size, "r");
+        // fputs(mem_file, in);
+        // fgets(buf, sizeof(buf), in);
+        // fclose(in);
+        // printf("%s", buf);
+        // strcspn();
+        
+        // while (fgets(buf, sizeof(buf), in)) {
+        //     // char *token = strtok(in, ";");
+        //     // while (token) {
+        //     //     printf("Fragment: %s\n", token);
+        //     //     token = strtok(NULL, ";");
+        //     // }
+        //     //printf("%s", buf);
+        //     if (strcmp(buf, "dees\r\n") == 0) {
+        //     }
+        // }
+
+        char * expbuf = NULL;
+        size_t size_expbuf = 0;
+        while (getline(&expbuf, &size_expbuf, in) != -1) {
+            int len = strlen(expbuf) - 2;
+            if (expbuf[len] == '\r') expbuf[len] = '\0';
+
+            if ((encrpt = crypt_r(expbuf, "$6$5MfvmFOaDU$", &_crypt_data)) != NULL) {
+                if (strcmp(encrpt, rl_res) == 0) {
+                    is_found = true;
+                    break;
+                }
+            }
+
+        }
+
+        /*
         for (int i = 0; i < st.st_size; i++) {
             if (mem_file[i] == '\r' && mem_file[i + 1] == '\n') { // chodzi o to, że hasła w pliku kończą się jako \r\n
                 i++;
@@ -142,8 +182,10 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
+        */
+        if (is_found) printf("Password found! Result is \"%s\"!\n", expbuf);
 
-        if (is_found) printf("Password found! Result is \"%s\"!\n", buf);
+
         free(buf);
         free(idx_arr);
     }
