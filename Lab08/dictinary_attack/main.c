@@ -18,7 +18,16 @@
 #define SIZE_TTD 10000
 #define SIZE_OHTD 100000
 
+
+// 181
+// 343
+// 516
+
 const char *rl_res = "$6$5MfvmFOaDU$CVt7jU9wJRYz3K98EklAJqp8RMG5NvReUSVK7ctVvc2VOnYVrvyTfXaIgHn2xQS78foEJZBq2oCIqwfdNp.2V1";
+
+pthread_mutex_t isfound_mutex=PTHREAD_MUTEX_INITIALIZER;
+bool is_found = false;
+int current_proc_size = 0;
 
 
 int *mem_blocks(char *mem_file, size_t size, int t) {
@@ -29,22 +38,21 @@ int *mem_blocks(char *mem_file, size_t size, int t) {
 
     printf("\n\n");
 
-    int *idx_arr = NULL;
-    idx_arr = malloc(sizeof * idx_arr * t);
+    int *pth_arr = NULL;
+    pth_arr = malloc(sizeof * pth_arr * (t + 1));
 
-    int k = 0;
-    for (int i = regular_block - 1; i < size; i += regular_block - 1) {
+    pth_arr[0] = 0;
+    int k = 1;
+    for (int i = regular_block - 1; i < size && k < t + 1; i += regular_block - 1) {
         if (mem_file[i] == '\r') { 
-            idx_arr[k] = i; 
-            k++;
+            pth_arr[k++] = i; 
             continue; 
         }
         int a = i;
         while (a < size && mem_file[a] != '\r') a++;
-        idx_arr[k] = a;
-        k++;
+        pth_arr[k++] = a;
     }
-    return idx_arr;
+    return pth_arr;
 }
 
 char *_mmap_rd(char *file_name, struct stat *st) {
@@ -64,9 +72,41 @@ char *_mmap_rd(char *file_name, struct stat *st) {
 
 
 void *proc_block(void *args) {
-    int *n = (int *)args;
-    printf("n = %d\n", n[1]);
-    free(n);
+    FILE *in = (FILE *)args;
+
+    pthread_t tid = pthread_self();
+    char * buf = NULL;
+    size_t size_buf = 0;
+
+    char *encrpt = NULL; 
+    struct crypt_data _crypt_data;
+
+    while (getline(&buf, &size_buf, in) != -1) {
+        int buflen = strlen(buf);
+        pthread_mutex_lock(&isfound_mutex);
+        bool found = is_found;
+        current_proc_size += buflen;
+        pthread_mutex_unlock(&isfound_mutex);
+
+        if (found) break;
+
+        int idx = buflen - 2;
+        if (buf[idx] == '\r') buf[idx] = '\0';
+
+        if ((encrpt = crypt_r(buf, "$6$5MfvmFOaDU$", &_crypt_data)) != NULL) {
+            if (strcmp(encrpt, rl_res) == 0) {
+                printf("Password found! Result is \"%s\"! [%ld]\n", buf, tid);
+                pthread_mutex_lock(&isfound_mutex);
+                is_found = true;
+                pthread_mutex_unlock(&isfound_mutex);
+                break;
+            }
+        }
+        sleep(1);
+    }
+    free(buf);
+    fclose(in);
+    pthread_exit(0);
     return NULL;
 }
 
@@ -114,83 +154,43 @@ int main(int argc, char *argv[]) {
         printf("\nSize: %ld\n", st.st_size);
 
 
-        int *idx_arr = mem_blocks(mem_file, st.st_size, t);
+        int *pth_arr = mem_blocks(mem_file, st.st_size, t);
 
-        for (int i = 0;i<t;i++) {
-            printf("%d\n", idx_arr[i]);
+        pthread_t *threads = NULL;
+        threads = malloc(sizeof * threads * t);
+
+        for (int i = 0; i < t; i++) {
+            size_t offset = pth_arr[i];
+            size_t leng = pth_arr[i+1] - offset;
+            FILE *in = fmemopen(&mem_file[offset], leng, "r");
+            pthread_create(&threads[i], NULL, proc_block, in);
         }
 
-        char * buf = NULL;
-        size_t size_buf = 0;
-        size_t offset = idx_arr[1];
-        size_t leng = idx_arr[2] - offset;
-        // FILE *in = fmemopen(mem_file, st.st_size, "r");
-        FILE *in = fmemopen(&mem_file[offset], leng, "r");
+        while (true) {
+            pthread_mutex_lock(&isfound_mutex);
+            bool done = is_found || current_proc_size >= st.st_size;
+            pthread_mutex_unlock(&isfound_mutex);
+        
+            if (done) break;
+        
+            printf("Progress: %d / %ld\r", current_proc_size, st.st_size);
+            fflush(stdout);
+        }
 
-        char *encrpt = NULL; 
-        struct crypt_data _crypt_data;
-        bool is_found = false;
-
-        while (getline(&buf, &size_buf, in) != -1) {
-            int len = strlen(buf) - 2;
-            if (buf[len] == '\r') buf[len] = '\0';
-
-            if ((encrpt = crypt_r(buf, "$6$5MfvmFOaDU$", &_crypt_data)) != NULL) {
-                if (strcmp(encrpt, rl_res) == 0) {
-                    is_found = true;
-                    break;
-                }
+        for (int i = 0; i < t; i++) {
+            if (pthread_join(threads[i], NULL) != 0) {
+                printf("Error joining thread\n");
+                return 1;
             }
-
         }
 
-        if (is_found) printf("Password found! Result is \"%s\"!\n", buf);
 
-        pthread_t thr;
-        int a = 4;
-        int *arr = malloc(sizeof(int) * 2);
-        arr[0] = 23;
-        arr[1] = 1;
-        pthread_create(&thr, NULL, proc_block, arr);
+        free(threads);
+        free(pth_arr);
 
-        free(buf);
-        fclose(in);
-        // free(arr);
-        pthread_join(thr, NULL);
-        free(idx_arr);
+        if (!is_found) printf("Password not found!\n");
+        return 0;
     }
 
     return 0;
 }
-
-
-/*
-FILE *stream = open_memstream(&buf, &sbf);
-
-for (int i = 0; i < st.st_size; i++) {
-    if (mem_file[i] == '\r' && mem_file[i + 1] == '\n') { // chodzi o to, że hasła w pliku kończą się jako \r\n
-        i++;
-        fclose(stream);
-        if ((encrpt = crypt_r(buf, "$6$5MfvmFOaDU$", &_crypt_data)) != NULL) {
-            if (strcmp(encrpt, rl_res) == 0) {
-                is_found = true;
-                break;
-            }
-        }
-        free(buf);
-        sbf = 0;
-        stream = open_memstream(&buf, &sbf);   
-        continue;
-    }
-    fputc(mem_file[i], stream);
-}
-
-if (!is_found) {
-    fclose(stream);
-    if ((encrpt = crypt_r(buf, "$6$5MfvmFOaDU$", &_crypt_data)) != NULL) {
-        if (strcmp(encrpt, rl_res) == 0) {
-            is_found = true;
-        }
-    }
-}
-*/

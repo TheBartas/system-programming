@@ -2,4 +2,4 @@ CC=gcc
 
 
 attack: main.c 
-	${CC} -o attack main.c -lcrypt
+	${CC} -pthread -o attack main.c -lcrypt
