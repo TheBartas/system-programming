@@ -26,7 +26,7 @@ int main(int argc, char * argv[]) {
         fprintf(stderr, "Error matching password: password not found [%s]", encrpt);
         return PASSWD_NFND;
     }
-    printf("Encrypted %s: \n", encrpt);
+    printf("Encrypted: %s \n", encrpt);
 
 
     const char *rl_res = "$6$5MfvmFOaDU$CVt7jU9wJRYz3K98EklAJqp8RMG5NvReUSVK7ctVvc2VOnYVrvyTfXaIgHn2xQS78foEJZBq2oCIqwfdNp.2V1";
