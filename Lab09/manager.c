@@ -14,7 +14,13 @@
 #include "data.h"
 
 #define ERROR_NOARG -2
+
+
 volatile sig_atomic_t timed_out = 0;
+static char *mem_file = NULL;
+static struct stat st;
+static blckinfo *arr_infot = NULL;
+static int id = -1;
 
 // ipcs -q
 // ipcrm -q <id> 
@@ -58,7 +64,7 @@ void prpr_file(char *mem_file, size_t fsize, int t, int *get_nlines, int *get_re
     fclose(in);
 }
 
-void create_queue(blckinfo *_blckinfo, int t, int regblc_nlines, int lastblc_nlines) {
+void queue_create(blckinfo *_blckinfo, int t, int regblc_nlines, int lastblc_nlines) {
     int idx = 0;
     int offset = 0;
 
@@ -67,7 +73,7 @@ void create_queue(blckinfo *_blckinfo, int t, int regblc_nlines, int lastblc_nli
 
         _blckinfo[idx].blck_idx = idx;
         _blckinfo[idx].frst_idx = offset;
-        _blckinfo[idx].lst_idx = offset + nlines - 1;
+        _blckinfo[idx].lst_idx = offset + nlines;
         _blckinfo[idx].is_avbil = true;
 
         printf("Block %d: lines [%d - %d], length = %d, available = %s\n",
@@ -82,10 +88,38 @@ void create_queue(blckinfo *_blckinfo, int t, int regblc_nlines, int lastblc_nli
     }
 }   
 
+
 void sigalarmhndl(int sig) {
     timed_out = 1;
 }
 
+void siginthndl(int sig) {
+
+    if (mem_file) {
+        munmap(mem_file, st.st_size);
+        printf("[Manager] Reports: unmapped memory.\n");
+    }
+
+    if (arr_infot) {
+        free(arr_infot);
+        printf("[Manager] Reports: freed task array.\n");
+    }
+
+    if (id >= 0) {
+        msgctl(id, IPC_RMID, NULL);
+        printf("[Manager] Reports: removed message queue.\n");
+    }
+
+    exit(0);
+}
+
+void set_sigint() {
+    struct sigaction sigint;
+    sigint.sa_handler = &siginthndl;
+    sigint.sa_flags = 0;
+    sigemptyset(&sigint.sa_mask); 
+    sigaction(SIGINT, &sigint, NULL);
+}
 
 int main(int argc, char* argv[]) {
     const char *optstring = "t:f:p:";
@@ -113,8 +147,9 @@ int main(int argc, char* argv[]) {
     printf("Hash:                  [%s]\n", passwd);
     printf("----------------------------------------------------\n");
 
-    struct stat st;
-    char *mem_file = _ldfltomem(f, &st);
+    set_sigint();
+
+    mem_file = _ldfltomem(f, &st);
 
     if (!mem_file){
         fprintf(stderr, "Error: _ldfltomem returned NULL!\n");
@@ -123,13 +158,15 @@ int main(int argc, char* argv[]) {
 
     int nlines = 0, regbl_nlines = 0, lastbl_nlines = 0;
     prpr_file(mem_file, st.st_size, t, &nlines, &regbl_nlines, &lastbl_nlines);
+
     printf("----------------------------------------------------\n");
     printf("Number of lines: %d\n", nlines);
     printf("Number of reg lines: %d\n", regbl_nlines);
     printf("Number of last lines: %d\n", lastbl_nlines);
     printf("----------------------------------------------------\n");
     key_t key = ftok("passwords.txt", 'z');
-    int id = msgget(key, IPC_CREAT | 0600);
+    id = msgget(key, IPC_CREAT | 0600);
+
 
     printf("Key:    %d\n", key);
     printf("id:    %d\n", id);
@@ -140,43 +177,73 @@ int main(int argc, char* argv[]) {
     sigemptyset(&sigalarm.sa_mask); 
     sigaction(SIGALRM, &sigalarm, NULL);
 
-    blckinfo *arr_infot = NULL;
     arr_infot = malloc(sizeof * arr_infot * t);
 
-    create_queue(arr_infot, t, regbl_nlines, lastbl_nlines);
+    queue_create(arr_infot, t, regbl_nlines, lastbl_nlines);
 
     hllmsg _hllmsg;
-    int r, i = 0;
+    errmsg _errmsg;
+    int r, s1 = 0, wtasks = 0, s2 = 0, tcnt = 0;
+    int e;
     while(t > 0) {
-        r = msgrcv(id, &_hllmsg, sizeof(_hllmsg) - sizeof(long), 4, 0); // IPC_NOWAIT
-        if (r < 0) {
-            printf("nigga won't work!\n");
-            continue;
-        }
-        printf("Worker with PID %d reports!\n", _hllmsg.id);
-        if (_hllmsg.ready) {
-            strdt data = {.type = 1, .offset = i * 10, .length = 10};
-            strcpy(data.file_name, f);
-            
-            msgsnd(id, &data, sizeof(data) - sizeof(long), 0);
+        r = msgrcv(id, &_hllmsg, sizeof(_hllmsg) - sizeof(long), 4, IPC_NOWAIT); // IPC_NOWAIT
 
-            alarm(4); 
+        if (r > 0) {
+            printf("Worker with PID %d reports!\n", _hllmsg.id);
+            if (_hllmsg.ready) {
+                wtasks = _hllmsg.tasks - 1;
 
-            bckmsg _bckmsg;
-            int r = msgrcv(id, &_bckmsg, sizeof(_bckmsg) - sizeof(long), 0, 0);
+                while (s1 < t && tcnt < wtasks) {
+                    s2++;
+                    tcnt++;
+                }
+                printf("How many tasks: %d (id: %d).\n", _hllmsg.tasks, _hllmsg.id);
+                printf("Index 1: %d\n", s1);
+                printf("Index 2: %d\n", s2);
 
-            if (r >= 0 && !timed_out) {
-                printf("Received message from worker.\n");
-            } else if (timed_out) {
-                printf("Timeout occurred.\n");
-                //break;
-            } else {
-                perror("msgrcv failed");
-                break;
+                strdt data = {.type = 1, .frt_idx = arr_infot[s1].frst_idx, .scd_idx = arr_infot[s2].lst_idx};
+                strcpy(data.file_name, f);
+                
+                msgsnd(id, &data, sizeof(data) - sizeof(long), 0);
+                timed_out = 0;
+
+                alarm(10); 
+
+                bckmsg _bckmsg;
+                r = msgrcv(id, &_bckmsg, sizeof(_bckmsg) - sizeof(long), 2, 0);
+
+
+                // if (r >= 0 && !timed_out) {
+                //     printf("Received message from worker.\n");
+                //     t -= _hllmsg.tasks;
+                // } else if (timed_out) {
+                //     printf("Timeout occurred.\n");
+                // } 
+                printf("r = %d\n", r);
+                if (r >= 0) {
+                    int essa = alarm(0); 
+
+                    printf("Time: %d\n", essa);
+                    if (!timed_out) {
+                        printf("Received message from worker.\n");
+                    } else {
+                        printf("Message received, but after timeout (race condition).\n");
+                    }
+                }
+
+                s2++;
+                s1 = s2;
+                tcnt = 0;
+
+                printf("\n\n");
+                _hllmsg.ready = false;
             }
-            t--;
-            i++;
-            _hllmsg.ready = false;
+        }
+
+        e = msgrcv(id, &_errmsg, sizeof(_errmsg) - sizeof(long), 10, IPC_NOWAIT);
+        if (e > 0) {
+            printf("[Manager] Reports: worker %d (PID) stopped working.\n", _errmsg.pid);
+            printf("[Manager] Reports: new value of \"s1\" is %d.\n", _errmsg.nwline);
         }
     }
 

@@ -17,8 +17,8 @@ typedef struct {
 
 typedef struct { 
     long type;
-    int offset;
-    int length;
+    int frt_idx;
+    int scd_idx;
     char file_name[MAX_FILE_SIZE];
 } strdt; // stream data
 
@@ -38,7 +38,14 @@ typedef struct {
 
 typedef struct {
     long type;
+    int nwline;
+    pid_t pid;
+} errmsg;
+
+typedef struct {
+    long type;
     bool ready;
+    int tasks;
     pid_t id;
 } hllmsg;
 
