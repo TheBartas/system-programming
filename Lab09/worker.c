@@ -16,6 +16,7 @@
 static int new_s1 = 0;
 static int old_s1 = 0;
 static int id = -1;
+static int pgid= -1; // if (not)found password 
 
 char *_conntomem(char *file_name, struct stat *st) { // _connect_to_shm
     int fd = open(file_name, O_RDONLY); 
@@ -106,6 +107,13 @@ int main(int argc, char *argv[]) {
 
     id = msgget(key, IPC_CREAT | 0600);
 
+    key_t fkey = ftok(".", 'z');
+    pgid= msgget(fkey, IPC_CREAT | 0600);
+
+
+    printf("Key:    %d\n", key);
+    printf("FKey:   %d\n", fkey);
+
     // ------ send data ------
 
     hllmsg _hllmsg = { .type = 4, .ready = true, .id = getpid(), .tasks = t };
@@ -122,7 +130,7 @@ int main(int argc, char *argv[]) {
 
     // ------ send if recive ------
 
-    bckmsg _bckmsg = {.type = 2, .found = false, .rec = true};
+    bckmsg _bckmsg = {.type = TYPE_BCKMSG_QUE, .found = false, .rec = true, .pid = getpid()};
     msgsnd(id, &_bckmsg, sizeof(_bckmsg) - sizeof(long), 0);
 
 
@@ -130,12 +138,13 @@ int main(int argc, char *argv[]) {
     int data_frt_idx = data.frt_idx;
     int data_scd_idx = data.scd_idx;
     old_s1 = data_frt_idx;
+    new_s1 = data_frt_idx;
 
     printf("Source file name: %s\n", file_name);
     printf("----------------------------------------------------\n");
     printf("Offset (begin index):       [%d]\n", data_frt_idx);
     printf("Lenght (last index):        [%d]\n", data_scd_idx);
-    printf("Hash:                       [TO DO]\n");
+    printf("Hash:                       [TO DO: %s]\n", data.hash);
     printf("----------------------------------------------------\n");
 
 
@@ -163,14 +172,30 @@ int main(int argc, char *argv[]) {
 
     bool is_found = false;
     while (getline(&buf, &size_buf, in) != -1) {
-        sleep(2);
+        usleep(100000);
         new_s1++;
-        printf("i = %d | %s", ++i, buf);
 
-        if (is_found) {
-            
+        // int idx = strlen(buf) - 1;
+        // if (buf[idx] == '\n') buf[idx] = '\0';
+
+        buf[strcspn(buf, "\r\n")] = 0; 
+
+        if (strcmp(buf, data.hash) == 0) {
+            is_found = true;
+            break;
         }
+
+        printf("i = %d | %s\n", ++i, buf);
     }
+
+    if (is_found)  {
+        printf("Found!\n");
+        _bckmsg.found = true;
+    }
+
+    _bckmsg.type = TYPE_FNDEND_BCKMSG_QUE;
+    _bckmsg.mtasks = t;
+    msgsnd(id, &_bckmsg, sizeof(_bckmsg) - sizeof(long), 0);
 
     free(buf);
     fclose(in);
