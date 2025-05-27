@@ -1,0 +1,9 @@
+{
+    "files.associations": {
+        "ipc.h": "c",
+        "msg.h": "c",
+        "mman.h": "c",
+        "types.h": "c"
+    },
+    "C_Cpp.errorSquiggles": "disabled"
+}
