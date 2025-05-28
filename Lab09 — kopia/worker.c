@@ -14,6 +14,10 @@
 
 static int id = -1;
 static int pgid= -1; // if (not)found password 
+static FILE *in = NULL;
+static char *buf = NULL;
+static char *mem_file = NULL;
+static struct stat st;
 
 char *_conntomem(char *file_name, struct stat *st) { // _connect_to_shm
     int fd = open(file_name, O_RDONLY); 
@@ -68,7 +72,20 @@ void snd_hellomsg(int id, int t) {
 
 
 void siginthndl(int sig) {
+    if (mem_file) {
+        munmap(mem_file, st.st_size);
+        printf("[Worker] \'mem_file\' munmaped.\n");
+    }
 
+    if (in) {
+        fclose(in);
+        printf("[Worker] \'*in\' closed.\n");
+    }
+
+    if (buf) {
+        free(buf);
+        printf("[Worker] \'buf\' closed.\n");
+    }
     exit(-1);
 }
 
@@ -142,9 +159,7 @@ int main(int argc, char *argv[]) {
     printf("Hash:                       [TO DO: %s]\n", data.hash);
     printf("----------------------------------------------------\n");
 
-
-    struct stat st;
-    char *mem_file = _conntomem(file_name, &st);
+    mem_file = _conntomem(file_name, &st);
 
     if (mem_file) 
         printf("[Worker / Info] Load to file correct!\n");
@@ -157,17 +172,17 @@ int main(int argc, char *argv[]) {
     int start_idx = 0, end_idx = 0;
     calc_range(mem_file, st.st_size, data_frt_idx, data_scd_idx, &start_idx, &end_idx);
 
-    FILE *in = fmemopen(&mem_file[start_idx], end_idx, "r");
-    char *buf = NULL;
+    in = fmemopen(&mem_file[start_idx], end_idx, "r");
+
     size_t size_buf = 0;
     int nlines = 0;
 
-    int i = 0;
-
+    int i = 0, m = 350;
+    pgrmsg _pgrmsg = {0};
+    _pgrmsg.type = TYPE_PRGMSG_QUE;
     bool is_found = false;
     while (getline(&buf, &size_buf, in) != -1) {
-        usleep(100000);
-
+        usleep(1000);
         buf[strcspn(buf, "\r\n")] = 0; 
 
         if (strcmp(buf, data.hash) == 0) {
@@ -175,11 +190,14 @@ int main(int argc, char *argv[]) {
             break;
         }
 
-        printf("i = %d | %s\n", ++i, buf);
+        if (++i % m == 0) {
+            _pgrmsg.ndone = m;
+            msgsnd(pgid, &_pgrmsg, sizeof(_pgrmsg) - sizeof(long), 0);
+        }
     }
 
     if (is_found)  {
-        printf("[Worker %d] Found!\n", getpid());
+        printf("[Worker / %d] Found!\n", getpid());
         _bckmsg.found = true;
     }
 
@@ -188,5 +206,8 @@ int main(int argc, char *argv[]) {
     msgsnd(id, &_bckmsg, sizeof(_bckmsg) - sizeof(long), 0);
     
     free(buf);
+    if (mem_file) {
+        munmap(mem_file, st.st_size);
+    }
     fclose(in);
 }
