@@ -115,7 +115,6 @@ void *control_workers(void *args) {
     while(1) {
         if (isend) break;
         for (int i = 0; i < t; i++) {
-            pid_t pid;
             // if ((pid = arr_infot[i].pid) > 0) {
             //     int s; 
             //     if ((s = kill(pid, 0)) == -1) {
@@ -148,6 +147,11 @@ void *control_workers(void *args) {
 
         usleep(100000);
     }
+}
+
+void *control_progress(void *args) {
+    printf("[Manager / Thread - Progrees] TID:    %d\n", pgid);
+
 }
 
 int smaller(int a, int b) {
@@ -221,7 +225,7 @@ int main(int argc, char* argv[]) {
     printf("Source File:           [%s]\n", f);
     printf("Number of tasks:       [%d]\n", t);
     printf("Hash:                  [%s]\n", hash);
-    printf("----------------------------------------------------\n");
+    printf("----------------------------------------------------\n\n");
 
     set_sigint();
 
@@ -239,17 +243,19 @@ int main(int argc, char* argv[]) {
     printf("Number of lines: %d\n", nlines);
     printf("Number of reg lines: %d\n", regbl_nlines);
     printf("Number of last lines: %d\n", lastbl_nlines);
-    printf("----------------------------------------------------\n");
+    printf("----------------------------------------------------\n\n");
+
     key_t key = ftok("passwords.txt", 'z');
     id = msgget(key, IPC_CREAT | 0600);
 
-    key_t fkey = ftok(".", 'z');
-    pgid= msgget(fkey, IPC_CREAT | 0600);
+    key_t pkey = ftok("worker.c", 'z');
+    pgid= msgget(pkey, IPC_CREAT | 0600);
 
-
+    printf("----------------------------------------------------\n");
     printf("Key:    %d\n", key);
-    printf("FKey:   %d\n", fkey);
+    printf("Progress Key:   %d\n", pkey);
     printf("id:     %d\n", id);
+    printf("----------------------------------------------------\n\n");
 
     struct sigaction sigalarm;
     sigalarm.sa_handler = &sigalarmhndl;
@@ -257,20 +263,25 @@ int main(int argc, char* argv[]) {
     sigemptyset(&sigalarm.sa_mask); 
     sigaction(SIGALRM, &sigalarm, NULL);
 
+
     arr_infot = malloc(sizeof * arr_infot * t);
     arr_fails = malloc(sizeof * arr_fails * t);
     for (int i = 0; i < t; i++) arr_fails[i] = 0;
-
     queue_create(arr_infot, t, regbl_nlines, lastbl_nlines);
+
 
     thread_args_t args = {.t = t};
     pthread_t work_cntr_tid; // worker_control_tid
     pthread_create(&work_cntr_tid, NULL, control_workers, &args);
 
+    pthread_t prog_cntr_tid; // progress_control_tid
+    pthread_create(&prog_cntr_tid, NULL, control_progress, NULL);
+
+
     hllmsg _hllmsg;
     int r, wtasks = 0,s1 = 0, s2 = 0, tcnt = 0, at = t;
     tmp_num_tsks = t;
-    bool is_checking = false;
+    bool is_checking = false, isfound = false;
 
     while(at > 0) {
         r = msgrcv(id, &_hllmsg, sizeof(_hllmsg) - sizeof(long), TYPE_HLLMSG_QUE, IPC_NOWAIT); // IPC_NOWAIT
@@ -281,29 +292,18 @@ int main(int argc, char* argv[]) {
             printf("[Manager] wtasks: %d\n", wtasks);
 
             wtasks = smaller(wtasks, tmp_num_tsks);
-            
-            if (!is_fail) {
-                for (; s2 < t && tcnt < wtasks - 1; s2++) {
-                    tcnt++;
-                }
 
-                s2 = smaller(s2, t - 1);
-                tmp_num_tsks -= s2 - s1 + 1;
-
-            } else {
-                s1 = -1, s2 = -1;
-                tcnt = 0;
-                for (int i = 0; i < t && tcnt < wtasks; i++) {
-                    if (!arr_infot[i].isdone && !arr_infot[i].inprogress) {
-                        if (s1 == -1) s1 = i; 
-                        s2 = i;    
-                        tcnt++;          
-                    } else if (s1 != -1) {
-                        break; 
-                    }
+            s1 = -1, s2 = -1;
+            tcnt = 0;
+            for (int i = 0; i < t && tcnt < wtasks; i++) {
+                if (!arr_infot[i].isdone && !arr_infot[i].inprogress) {
+                    if (s1 == -1) s1 = i; 
+                    s2 = i;    
+                    tcnt++;          
+                } else if (s1 != -1) {
+                    break; 
                 }
             }
-
 
             pthread_mutex_lock(&mtx_info);
             assign_worker(arr_infot, _hllmsg.id, s1, s2);
@@ -374,6 +374,12 @@ int main(int argc, char* argv[]) {
         if (s2 == t) {
             is_fail = true;
         }
+    }
+
+    if (!isfound) {
+        pthread_mutex_lock(&mtxnotfnd);
+        isend = true;
+        pthread_mutex_unlock(&mtxnotfnd);
     }
 
     printf("Main loop ended!\n");

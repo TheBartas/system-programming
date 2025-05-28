@@ -11,6 +11,7 @@
 #define TYPE_BCKMSG_QUE 2
 #define TYPE_HLLMSG_QUE 4
 #define TYPE_FNDEND_BCKMSG_QUE 5
+#define TYPE_PRGMSG_QUE 6
 
 typedef struct {
     int blck_idx;
@@ -50,6 +51,11 @@ typedef struct {
     int tasks; // declare how many tasks worker can do
     pid_t id;
 } hllmsg;
+
+typedef struct {
+    long type;
+    int ndone;
+} pgrmsg;
 
 
 #endif

@@ -12,9 +12,6 @@
 
 #include "data.h"
 
-
-static int new_s1 = 0;
-static int old_s1 = 0;
 static int id = -1;
 static int pgid= -1; // if (not)found password 
 
@@ -97,21 +94,21 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    printf("----------------------------------------------------\n");
-    printf("Key:                   [%d]\n", key);
-    printf("Number of tasks:       [%d]\n", t);
-    printf("Worker PID:            [%d]\n", getpid());
-    printf("----------------------------------------------------\n");
     set_sigint();
 
     int r;
 
     id = msgget(key, IPC_CREAT | 0600);
 
-    key_t fkey = ftok(".", 'z');
-    pgid= msgget(fkey, IPC_CREAT | 0600);
+    key_t pkey = ftok("worker.c", 'z');
+    pgid= msgget(pkey, IPC_CREAT | 0600);
 
-    printf("FKey:   %d\n", fkey);
+    printf("----------------------------------------------------\n");
+    printf("Key:                   [%d]\n", key);
+    printf("Progress Key:          [%d]\n", pkey);
+    printf("Number of tasks:       [%d]\n", t);
+    printf("Worker PID:            [%d]\n", getpid());
+    printf("----------------------------------------------------\n");
 
     // ------ send data ------
     
@@ -138,8 +135,6 @@ int main(int argc, char *argv[]) {
     char *file_name = data.file_name;
     int data_frt_idx = data.frt_idx;
     int data_scd_idx = data.scd_idx;
-    old_s1 = data_frt_idx;
-    new_s1 = data_frt_idx;
     printf("\n\n----------------------------------------------------\n");
     printf("Source file name: %s\n", file_name);
     printf("Offset (begin index):       [%d]\n", data_frt_idx);
@@ -172,10 +167,6 @@ int main(int argc, char *argv[]) {
     bool is_found = false;
     while (getline(&buf, &size_buf, in) != -1) {
         usleep(100000);
-        new_s1++;
-
-        // int idx = strlen(buf) - 1;
-        // if (buf[idx] == '\n') buf[idx] = '\0';
 
         buf[strcspn(buf, "\r\n")] = 0; 
 
@@ -188,14 +179,14 @@ int main(int argc, char *argv[]) {
     }
 
     if (is_found)  {
-        printf("Found!\n");
+        printf("[Worker %d] Found!\n", getpid());
         _bckmsg.found = true;
     }
 
     _bckmsg.type = TYPE_FNDEND_BCKMSG_QUE;
     _bckmsg.mtasks = data.tasks;
     msgsnd(id, &_bckmsg, sizeof(_bckmsg) - sizeof(long), 0);
-
+    
     free(buf);
     fclose(in);
 }
