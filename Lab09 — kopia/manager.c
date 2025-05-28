@@ -20,6 +20,8 @@ pthread_mutex_t mtxnotfnd = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mtxisrterr = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mtxisfail = PTHREAD_MUTEX_INITIALIZER;
 
+pthread_mutex_t mtx_info = PTHREAD_MUTEX_INITIALIZER;
+
 static sig_atomic_t timed_out = 0; // volatile
 static char *mem_file = NULL;
 static struct stat st;
@@ -29,6 +31,7 @@ static int id = -1; // normal id
 static int pgid = -1; // for progress
 static bool isend = false;
 static bool is_fail = false;
+static int tmp_num_tsks = 0;
 
 // ipcs -q
 // ipcrm -q <id> 
@@ -99,6 +102,7 @@ void queue_create(blckinfo *_blckinfo, int t, int regblc_nlines, int lastblc_nli
 void assign_worker(blckinfo *_blckinfo, pid_t pid, int s1, int s2) {
     while (s1 <= s2) {
         _blckinfo[s1].pid = pid;
+        _blckinfo[s1].inprogress = true;
         s1++;
     }
 }
@@ -112,26 +116,37 @@ void *control_workers(void *args) {
         if (isend) break;
         for (int i = 0; i < t; i++) {
             pid_t pid;
-            if ((pid = arr_infot[i].pid) > 0) {
-                int s; 
-                if ((s = kill(pid, 0)) == -1) {
-                    printf("[Manager / Error] Worker with pid %d has been killed and is not reporting.\n", pid);
-                    printf("[Manager / Info] Task [%d] is again available.\n", i);
-                    printf("\n");
+            // if ((pid = arr_infot[i].pid) > 0) {
+            //     int s; 
+            //     if ((s = kill(pid, 0)) == -1) {
+            //         printf("[Manager / Error] Worker with pid %d has been killed and is not reporting.\n", pid);
+            //         printf("[Manager / Info] Task [%d] is again available.\n", i);
+            //         printf("\n");
+            //         arr_infot[i].pid = -1;
+
+            //         pthread_mutex_lock(&mtxisrterr);
+            //         arr_fails[i] = 1;
+            //         pthread_mutex_unlock(&mtxisrterr);
+
+            //         pthread_mutex_lock(&mtxisfail);
+            //         is_fail = true;
+            //         pthread_mutex_unlock(&mtxisfail);
+            //     }; 
+            // }
+
+            pthread_mutex_lock(&mtx_info);
+            if (!arr_infot[i].isdone){
+                if (arr_infot[i].inprogress && kill(arr_infot[i].pid, 0) == -1) {
+                    printf("[Manager / Error] Worker %d is dead. Resetting task %d\n", arr_infot[i].pid, i);
+                    arr_infot[i].inprogress = false;
                     arr_infot[i].pid = -1;
-
-                    pthread_mutex_lock(&mtxisrterr);
-                    arr_fails[i] = 1;
-                    pthread_mutex_unlock(&mtxisrterr);
-
-                    pthread_mutex_lock(&mtxisfail);
-                    is_fail = true;
-                    pthread_mutex_unlock(&mtxisfail);
-                }; 
+                    tmp_num_tsks++;
+                }
             }
+            pthread_mutex_unlock(&mtx_info);
         }
 
-        // usleep(0);
+        usleep(100000);
     }
 }
 
@@ -253,59 +268,57 @@ int main(int argc, char* argv[]) {
     pthread_create(&work_cntr_tid, NULL, control_workers, &args);
 
     hllmsg _hllmsg;
-    int r, wtasks = 0,s1 = 0, s2 = 0, tcnt = 0, at = t, tmp_num_tsks = t - 1;
+    int r, wtasks = 0,s1 = 0, s2 = 0, tcnt = 0, at = t;
+    tmp_num_tsks = t;
     bool is_checking = false;
 
     while(at > 0) {
         r = msgrcv(id, &_hllmsg, sizeof(_hllmsg) - sizeof(long), TYPE_HLLMSG_QUE, IPC_NOWAIT); // IPC_NOWAIT
 
-        if (r > 0) {
+        if (r > 0 && tmp_num_tsks > 0) {
             printf("[Manager] Worker with PID %d reports!\n", _hllmsg.id);
-            wtasks = _hllmsg.tasks - 1;
+            wtasks = _hllmsg.tasks; // max declare tasks by worker
+            printf("[Manager] wtasks: %d\n", wtasks);
 
-            if (is_fail && is_checking) {
-                int temp = 0;
-                printf("\n[Manager] Reports: re-run fails.\n");
-
-                for (int i = 0; i < t; i++) {
-                    if (arr_fails[i] == 1) {
-                        pthread_mutex_lock(&mtxisrterr);
-                        arr_fails[i] = 0;
-                        pthread_mutex_unlock(&mtxisrterr);
-                        temp++;
-                        if (temp == 1) s1 = i;
-
-                        if (i + 1 == t || arr_fails[i + 1] == 0) break;
-                    }
+            wtasks = smaller(wtasks, tmp_num_tsks);
+            
+            if (!is_fail) {
+                for (; s2 < t && tcnt < wtasks - 1; s2++) {
+                    tcnt++;
                 }
 
-                s2 = s1;
+                s2 = smaller(s2, t - 1);
+                tmp_num_tsks -= s2 - s1 + 1;
+
+            } else {
+                s1 = -1, s2 = -1;
+                tcnt = 0;
+                for (int i = 0; i < t && tcnt < wtasks; i++) {
+                    if (!arr_infot[i].isdone && !arr_infot[i].inprogress) {
+                        if (s1 == -1) s1 = i; 
+                        s2 = i;    
+                        tcnt++;          
+                    } else if (s1 != -1) {
+                        break; 
+                    }
+                }
             }
 
 
-            printf("[Manager] Number of available tasks: %d\n", tmp_num_tsks + 1);
-            int max_tasks = smaller(wtasks, tmp_num_tsks);
-            printf("[Manager] Worker do: %d\n", max_tasks + 1);
-
-            while (s1 < t && tcnt < max_tasks) {
-                s2++;
-                tcnt++;
-            }
-
-            tmp_num_tsks -= ++max_tasks; 
+            pthread_mutex_lock(&mtx_info);
+            assign_worker(arr_infot, _hllmsg.id, s1, s2);
+            pthread_mutex_unlock(&mtx_info);
 
             printf("[Manager] Number of available tasks: %d\n", tmp_num_tsks + 1);
             printf("\t|> How many tasks: %d (id: %d).\n", _hllmsg.tasks, _hllmsg.id);
             printf("\t|> Index 1: %d\n", s1);
             printf("\t|> Index 2: %d\n", s2);
 
-            strdt data = {.type = 1, .frt_idx = arr_infot[s1].frst_idx, .scd_idx = arr_infot[s2].lst_idx, .tasks = max_tasks};
+            strdt data = {.type = 1, .frt_idx = arr_infot[s1].frst_idx, .scd_idx = arr_infot[s2].lst_idx, .tasks = wtasks};
             strcpy(data.file_name, f);
             strcpy(data.hash, hash);
             
             msgsnd(id, &data, sizeof(data) - sizeof(long), 0);
-
-            assign_worker(arr_infot, _hllmsg.id, s1, s2);
 
             printf("\n");
             timed_out = 0;
@@ -335,9 +348,10 @@ int main(int argc, char* argv[]) {
         r = msgrcv(id,  &_bckmsg, sizeof(_bckmsg) - sizeof(long), TYPE_FNDEND_BCKMSG_QUE, IPC_NOWAIT);
         if (r > 0) {
             printf("[Manager] Worker with <PID> %d did his work. Result is %d.\n", _bckmsg.pid, _bckmsg.found);
+            printf("Zrobił: %d\n",_bckmsg.mtasks);
             int mtasks = _bckmsg.mtasks;
             at -= mtasks;
-            
+
             printf("[Manager] Yet: %d tasks.\n", at);
             if (_bckmsg.found) {
                 pthread_mutex_lock(&mtxnotfnd);
@@ -348,14 +362,17 @@ int main(int argc, char* argv[]) {
 
             pthread_mutex_lock(&mtxisrterr);
             for (int i = 0; i < t; i++) {
-                if (arr_infot[i].pid == _bckmsg.pid) arr_infot[i].pid = -2;
+                if (arr_infot[i].pid == _bckmsg.pid) {
+                    arr_infot[i].isdone = true;
+                    arr_infot[i].inprogress = false;
+                    arr_infot[i].pid = -2;
+                }
             }
             pthread_mutex_unlock(&mtxisrterr);
         }
 
-        if (s1 == t) { 
-            is_checking = true;
-
+        if (s2 == t) {
+            is_fail = true;
         }
     }
 

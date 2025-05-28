@@ -17,6 +17,7 @@ typedef struct {
     int frst_idx;
     int lst_idx;
     bool isdone;
+    bool inprogress;
     pid_t pid;
 } blckinfo; // aka task info
 
