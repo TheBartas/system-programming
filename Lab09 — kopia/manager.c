@@ -279,9 +279,9 @@ int main(int argc, char* argv[]) {
     pgid= msgget(pkey, IPC_CREAT | 0600);
 
     printf("----------------------------------------------------\n");
-    printf("Key:    %d\n", key);
+    printf("Key:            %d\n", key);
     printf("Progress Key:   %d\n", pkey);
-    printf("id:     %d\n", id);
+    printf("id:             %d\n", id);
     printf("----------------------------------------------------\n\n");
 
 

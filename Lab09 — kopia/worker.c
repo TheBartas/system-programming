@@ -9,6 +9,7 @@
 #include <sys/msg.h>
 #include <sys/ipc.h>
 #include <signal.h>
+#include <crypt.h>
 
 #include "data.h"
 
@@ -178,6 +179,9 @@ int main(int argc, char *argv[]) {
     int nlines = 0;
 
     int i = 0, m = 350;
+    struct crypt_data _crypt_data;
+    char *encrpt = NULL; 
+
     pgrmsg _pgrmsg = {0};
     _pgrmsg.type = TYPE_PRGMSG_QUE;
     bool is_found = false;
@@ -185,9 +189,16 @@ int main(int argc, char *argv[]) {
         usleep(1000);
         buf[strcspn(buf, "\r\n")] = 0; 
 
-        if (strcmp(buf, data.hash) == 0) {
-            is_found = true;
-            break;
+        // if (strcmp(buf, data.hash) == 0) {
+        //     is_found = true;
+        //     break;
+        // }
+
+        if ((encrpt = crypt_r(buf, "$6$5MfvmFOaDU$", &_crypt_data)) != NULL) {
+            if (strcmp(encrpt, data.hash) == 0) {
+                is_found = true;
+                break;
+            }
         }
 
         if (++i % m == 0) {
