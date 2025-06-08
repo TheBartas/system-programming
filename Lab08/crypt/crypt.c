@@ -8,6 +8,8 @@
 
 // salt= \$6\$5MfvmFOaDU\$
 
+// $6$MfvmFOaDU$HmQvr3VNC3.FZX1E1zWcd6stN07XirRual6a0BhNkkmUcxbEA0qlw/7Xuvz2xfnicoJFvdsdtrt0Kixw1c8n70
+
 int main(int argc, char * argv[]) {
     if (argc != 3) {
         fprintf(stderr, "[Error] Wrong number of command line arguments <%d>. Should be 2 [argc: 3]\n", argc - 1);

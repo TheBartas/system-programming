@@ -1,3 +1,6 @@
+// PS1 IS1 320 LAB08
+// Bartłomiej Szewczyk
+// sb53955@zut.edu.pl
 #include <stdlib.h>
 #include <stdio.h>
 #include <getopt.h>
@@ -138,7 +141,7 @@ void *proc_block(void *args) {
 
         if (found) break;
 
-        int idx = buflen - 1; // dla pliku example.txt -2
+        int idx = buflen - 1; // dla pliku example(A).txt -2 dla medium.txt -1
         if (buf[idx] == '\n') buf[idx] = '\0';
 
         if ((encrpt = crypt_r(buf, "$6$5MfvmFOaDU$", &_crypt_data)) != NULL) {
@@ -195,7 +198,7 @@ void benchmark(int av_proc, char *f) {
     struct stat st;
     char *mem_file = _mmap_rd(f, &st);
     printf("Benchmark start...\n");
-    av_proc = 4;
+    // av_proc = 4;
     for (int i = 1; i <= av_proc; i++) {
         int *pth_arr = mem_blocks(mem_file, st.st_size, i);
 
@@ -208,6 +211,11 @@ void benchmark(int av_proc, char *f) {
         int size = SIZE_FTD;
         int nlines = calc_nlines(mem_file, i);
         int *lines_arr = calc_nlines_sizes(size, i);
+
+        if (nlines < size) {
+            fprintf(stderr, "Error: nlines <%d> is less than benchmark line-size <%d>\n", nlines, size);
+            exit(1);
+        }
 
         pthread_t monitthrd;
         pthread_create(&monitthrd, NULL, proc_progress_bar, &size);
