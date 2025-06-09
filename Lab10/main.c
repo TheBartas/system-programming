@@ -8,91 +8,39 @@
 #include <sys/stat.h>
 #include <netdb.h>
 #include <pthread.h>
-#include <regex.h>
 #include <fcntl.h>
 #include <string.h>
+#include <regex.h>
 
 #define SERVER_HOST_ADDR "127.0.0.1"
 #define BUFFER_SIZE 2048
 
-void build_http_response(const char *file_name, 
-                        const char *file_ext, 
-                        char *response, 
-                        size_t *response_len) {
-
-    const char *mime_type = get_mime_type(file_ext);
-    char *header = (char *)malloc(BUFFER_SIZE * sizeof(char));
-    snprintf(header, BUFFER_SIZE,
-             "HTTP/1.1 200 OK\r\n"
-             "Content-Type: %s\r\n"
-             "\r\n",
-             mime_type);
-
-    int file_fd = open(file_name, O_RDONLY);
-    if (file_fd == -1) {
-        snprintf(response, BUFFER_SIZE,
-                 "HTTP/1.1 404 Not Found\r\n"
-                 "Content-Type: text/plain\r\n"
-                 "\r\n"
-                 "404 Not Found");
-        *response_len = strlen(response);
-        return;
-    }
-
-    struct stat file_stat;
-    fstat(file_fd, &file_stat);
-    off_t file_size = file_stat.st_size;
-
-    *response_len = 0;
-    memcpy(response, header, strlen(header));
-    *response_len += strlen(header);
-
-    ssize_t bytes_read;
-    while ((bytes_read = read(file_fd, 
-                            response + *response_len, 
-                            BUFFER_SIZE - *response_len)) > 0) {
-        *response_len += bytes_read;
-    }
-    free(header);
-    close(file_fd);
-}
-
 void *handle_client(void *arg) {
     int client_fd = *((int *)arg);
-    char *buffer = (char *)malloc(BUFFER_SIZE * sizeof(char));
+    char buf[BUFFER_SIZE];
+    
+    size_t received = recv(client_fd, buf, BUFFER_SIZE, 0);
 
-    ssize_t bytes_received = recv(client_fd, buffer, BUFFER_SIZE, 0);
-    if (bytes_received > 0) {
-
-        regex_t regex;
-        regcomp(&regex, "^GET /([^ ]*) HTTP/1", REG_EXTENDED);
-        regmatch_t matches[2];
-
-        if (regexec(&regex, buffer, 2, matches, 0) == 0) {
-            // extract filename from request and decode URL
-            buffer[matches[1].rm_eo] = '\0';
-            const char *url_encoded_file_name = buffer + matches[1].rm_so;
-            char *file_name = url_decode(url_encoded_file_name);
-
-
-            char file_ext[32];
-            strcpy(file_ext, "html");
-
-
-            char *response = (char *)malloc(BUFFER_SIZE * 2 * sizeof(char));
-            size_t response_len;
-            build_http_response(file_name, file_ext, response, &response_len);
-
-            send(client_fd, response, response_len, 0);
-
-            free(response);
-            free(file_name);
-        }
-        regfree(&regex);
+    if (received < 0) {
+        puts("Something went wrong!");
+        return NULL;
     }
-    close(client_fd);
-    free(arg);
-    free(buffer);
+
+    regex_t reg;
+    regcomp(&reg, "^GET /([^ ]*) HTTP/1", REG_EXTENDED);
+    regmatch_t matches[2];
+
+    if (regexec(&reg, buf, 2, matches, 0) == 0) {
+        buf[matches[1].rm_eo - 1] = '\0';
+        printf("From buf: %s\n", buf);
+        const char *url_encoded_file_name = buf + matches[1].rm_so;
+    }
+
+
+
+
+
+
     return NULL;
 }
 
@@ -116,9 +64,6 @@ int main(int argc, char *argv[]) {
     printf("s_flag = %d\n", s_flag);
     printf("q_flag = %d\n", q_flag);
 
-    if (q_flag) {
-        // TODO: close server if exists
-    }
     if (q_flag == 1 && s_flag == 1) {
         fprintf(stderr, "[Error] Cannot use <-s> [%s] and <-q> [%s] in the same command.\n", s_flag ? "true" : "false", q_flag ? "true" : "false");
         exit(-1);
@@ -126,13 +71,18 @@ int main(int argc, char *argv[]) {
 
     int ifsd = socket(AF_INET, SOCK_STREAM, 0); // AF_UNIX odwołuje się do plików lokalnych
 
+    if (q_flag) {
+        // TODO: close server if exists
+        close(ifsd);
+    }
+
     struct addrinfo* res;
     int hostinfo = getaddrinfo(SERVER_HOST_ADDR, port, NULL, &res);
     int bnd = bind(ifsd, res->ai_addr, res->ai_addrlen);
 
     printf("bind = %d\n", bnd);
     if (bnd < 0) {
-        printf("Error\n");
+        perror("bind");
         exit(-1);
     }
 
@@ -160,6 +110,5 @@ int main(int argc, char *argv[]) {
     }
 
     freeaddrinfo(res);
-
     return 0;
 }
