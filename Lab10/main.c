@@ -13,7 +13,49 @@
 #include <regex.h>
 
 #define SERVER_HOST_ADDR "127.0.0.1"
-#define BUFFER_SIZE 2048
+#define BUFFER_SIZE 100000
+
+char *get_ext(const char *url) {
+    return url ? strrchr(url, '.') + 1 : NULL;
+}
+
+char *set_ext(char *ext) {
+    if (strcmp(ext, "html") == 0) return "text/html";
+    else if (strcmp(ext, "jpg") == 0 || strcmp(ext, "jpeg") == 0) return "image/jpeg";
+    else if (strcmp(ext, "png") == 0) return "image/png";
+    else if (strcmp(ext, "gif") == 0) return "image/gif";
+
+    return "text/plain";
+}
+
+void build_http_response(const char *file_path, char *ext, char *res, size_t *res_len) {
+    int file_fd = open(file_path, O_RDONLY);
+
+    if (file_fd < 0) {
+        const char *not_found =
+            "HTTP/1.0 404 Not Found\r\n"
+            "Content-Type: text/plain\r\n\r\n"
+            "404 Not Found\n";
+        strcpy(res, not_found);
+        *res_len = strlen(not_found);
+        return;
+    }
+    
+    struct stat st;
+    fstat(file_fd, &st); 
+
+    int header_len = snprintf(res, BUFFER_SIZE, 
+            "HTTP/1.0 200 OK\r\n"
+            "Content-Type: %s\r\n\r\n",
+            // "Content-Length: %ld\r\n", 
+            set_ext(ext));
+
+    ssize_t bytes_read = read(file_fd, res + header_len, BUFFER_SIZE - header_len);
+    if (bytes_read < 0) bytes_read = 0;
+
+    *res_len = header_len + bytes_read;
+    close(file_fd);
+}
 
 void *handle_client(void *arg) {
     int client_fd = *((int *)arg);
@@ -31,16 +73,35 @@ void *handle_client(void *arg) {
     regmatch_t matches[2];
 
     if (regexec(&reg, buf, 2, matches, 0) == 0) {
-        buf[matches[1].rm_eo - 1] = '\0';
+        buf[matches[1].rm_eo] = '\0';
         printf("From buf: %s\n", buf);
-        const char *url_encoded_file_name = buf + matches[1].rm_so;
+        const char *url_path = buf + matches[1].rm_so;
+
+        if (strlen(url_path) == 0) url_path = "index.html";
+
+        char path[BUFFER_SIZE];
+        snprintf(path, BUFFER_SIZE, "html/%s", url_path);
+
+        char *ext = get_ext(url_path);
+        printf("ext %s\n", ext);
+
+        char *response = malloc(BUFFER_SIZE * 2 * sizeof(char));
+        size_t res_len;
+        build_http_response(path, ext, response, &res_len);
+
+        send(client_fd, response, res_len, 0);
+        free(response);
+    }  else {
+        const char *not_implemented =
+            "HTTP/1.0 501 Not Implemented\r\n"
+            "Content-Type: text/plain\r\n\r\n"
+            "501 Not Implemented: Method not supported\n";
+
+        send(client_fd, not_implemented, strlen(not_implemented), 0);
+        exit(1);
     }
 
-
-
-
-
-
+    regfree(&reg);
     return NULL;
 }
 
@@ -83,7 +144,7 @@ int main(int argc, char *argv[]) {
     printf("bind = %d\n", bnd);
     if (bnd < 0) {
         perror("bind");
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
 
     if (listen(ifsd, 3) < 0) {
@@ -100,7 +161,6 @@ int main(int argc, char *argv[]) {
             perror("accept failed\n");
             continue;
         }
-
 
         printf("Connected!\n");
 
