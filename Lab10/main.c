@@ -13,19 +13,27 @@
 #include <regex.h>
 
 #define SERVER_HOST_ADDR "127.0.0.1"
-#define BUFFER_SIZE 100000
+#define BUFFER_SIZE 400000
 
-char *get_ext(const char *url) {
+char *get_ext1(const char *url) {
     return url ? strrchr(url, '.') + 1 : NULL;
 }
 
-char *set_ext(char *ext) {
-    if (strcmp(ext, "html") == 0) return "text/html";
-    else if (strcmp(ext, "jpg") == 0 || strcmp(ext, "jpeg") == 0) return "image/jpeg";
-    else if (strcmp(ext, "png") == 0) return "image/png";
-    else if (strcmp(ext, "gif") == 0) return "image/gif";
+char *get_ext(const char *url) {
+    if (!url) return NULL;
+    char *dot = strrchr(url, '.');
+    if (!dot) return NULL;
+    return dot + 1;
+}
 
-    return "text/plain";
+char *set_ext(char *ext) {
+    if (strcmp(ext, "html") == 0) return "html";
+    else if (strcmp(ext, "jpg") == 0 || strcmp(ext, "jpeg") == 0) return "jpg";
+    else if (strcmp(ext, "png") == 0) return "png";
+    else if (strcmp(ext, "gif") == 0) return "gif";
+    else if (strcmp(ext, "ico") == 0) return "ico";
+
+    return "plain";
 }
 
 void build_http_response(const char *file_path, char *ext, char *res, size_t *res_len) {
@@ -46,9 +54,10 @@ void build_http_response(const char *file_path, char *ext, char *res, size_t *re
 
     int header_len = snprintf(res, BUFFER_SIZE, 
             "HTTP/1.0 200 OK\r\n"
-            "Content-Type: %s\r\n\r\n",
-            // "Content-Length: %ld\r\n", 
+            "Content-Type: text/%s\r\n\r\n",
             set_ext(ext));
+
+    printf("nigga set_ext %s\n", set_ext(ext));
 
     ssize_t bytes_read = read(file_fd, res + header_len, BUFFER_SIZE - header_len);
     if (bytes_read < 0) bytes_read = 0;
@@ -85,11 +94,17 @@ void *handle_client(void *arg) {
         char *ext = get_ext(url_path);
         printf("ext %s\n", ext);
 
+
+        char header[256];
         char *response = malloc(BUFFER_SIZE * 2 * sizeof(char));
         size_t res_len;
         build_http_response(path, ext, response, &res_len);
-
-        send(client_fd, response, res_len, 0);
+        puts("NIgga");
+        // send(client_fd, );
+        printf("%ld\n", res_len);
+        printf("%s\n", header);
+        write(client_fd, response, res_len);
+        puts("NIgga after");
         free(response);
     }  else {
         const char *not_implemented =
