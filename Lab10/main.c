@@ -15,14 +15,10 @@
 #define SERVER_HOST_ADDR "127.0.0.1"
 #define BUFFER_SIZE 400000
 
-char *get_ext1(const char *url) {
-    return url ? strrchr(url, '.') + 1 : NULL;
-}
-
 char *get_ext(const char *url) {
     if (!url) return NULL;
     char *dot = strrchr(url, '.');
-    if (!dot) return NULL;
+    if (!dot) return "plain";
     return dot + 1;
 }
 
@@ -41,7 +37,7 @@ void build_http_response(const char *file_path, char *ext, char *res, size_t *re
 
     if (file_fd < 0) {
         const char *not_found =
-            "HTTP/1.0 404 Not Found\r\n"
+            "HTTP/1.1 404 Not Found\r\n"
             "Content-Type: text/plain\r\n\r\n"
             "404 Not Found\n";
         strcpy(res, not_found);
@@ -53,7 +49,7 @@ void build_http_response(const char *file_path, char *ext, char *res, size_t *re
     fstat(file_fd, &st); 
 
     int header_len = snprintf(res, BUFFER_SIZE, 
-            "HTTP/1.0 200 OK\r\n"
+            "HTTP/1.1 200 OK\r\n"
             "Content-Type: text/%s\r\n\r\n",
             set_ext(ext));
 
@@ -78,7 +74,7 @@ void *handle_client(void *arg) {
     }
 
     regex_t reg;
-    regcomp(&reg, "^GET /([^ ]*) HTTP/1", REG_EXTENDED);
+    regcomp(&reg, "^GET /([^ ]*) HTTP/1.1", REG_EXTENDED);
     regmatch_t matches[2];
 
     if (regexec(&reg, buf, 2, matches, 0) == 0) {
@@ -99,16 +95,14 @@ void *handle_client(void *arg) {
         char *response = malloc(BUFFER_SIZE * 2 * sizeof(char));
         size_t res_len;
         build_http_response(path, ext, response, &res_len);
-        puts("NIgga");
-        // send(client_fd, );
         printf("%ld\n", res_len);
         printf("%s\n", header);
         write(client_fd, response, res_len);
-        puts("NIgga after");
+        close(client_fd);
         free(response);
     }  else {
         const char *not_implemented =
-            "HTTP/1.0 501 Not Implemented\r\n"
+            "HTTP/1.1 501 Not Implemented\r\n"
             "Content-Type: text/plain\r\n\r\n"
             "501 Not Implemented: Method not supported\n";
 
